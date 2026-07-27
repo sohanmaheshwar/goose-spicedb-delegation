@@ -1,0 +1,51 @@
+# zed validate schema tests — the delegation matrix, checked purely against schema
+# logic (no running server needed). Run: `zed validate validation.yaml`
+#
+# The schema is referenced from schema.zed so this can never drift from what the
+# app actually writes. The agent's staging grant uses a far-future expiration so
+# the "agent may deploy staging" assertion is stable over time; expiry *timing*
+# itself is covered by tests/test_decide.py against a live server.
+schemaFile: "schema.zed"
+
+relationships: |-
+  environment:staging#direct_deployer@user:alice
+  environment:production#direct_deployer@user:alice
+  environment:production#approver@user:alice
+  environment:staging#destroyer@user:sre_admin
+  environment:production#destroyer@user:sre_admin
+  environment:staging#gated_by@environment:staging
+  environment:production#gated_by@environment:staging
+  agent:goose_alice#delegator@user:alice
+  environment:staging#agent_deployer@agent:goose_alice[expiration:2999-01-01T00:00:00Z]
+  environment:staging#agent_deployer@agent:goose_full[expiration:2999-01-01T00:00:00Z]
+  environment:production#agent_deployer@agent:goose_full[expiration:2999-01-01T00:00:00Z]
+  environment:production#agent_deployer@agent:goose_prodonly[expiration:2999-01-01T00:00:00Z]
+
+assertions:
+  assertTrue:
+    # Alice (the human SRE) has her full authority.
+    - "environment:staging#deploy@user:alice"
+    - "environment:production#deploy@user:alice"
+    - "environment:production#approve@user:alice"
+    # The agent may deploy staging (its delegated, unexpired grant)...
+    - "environment:staging#deploy@agent:goose_alice"
+    # ...and therefore may also view it, and alice (an operator) may manage it.
+    - "environment:staging#view@agent:goose_alice"
+    - "environment:staging#manage@user:alice"
+    # Cascade satisfied: goose_full holds staging AND production → prod autonomy holds.
+    - "environment:production#agent_deploy@agent:goose_full"
+    - "environment:production#deploy@agent:goose_full"
+  assertFalse:
+    # The agent has no production deploy grant (→ NEEDS_APPROVAL in the app).
+    - "environment:production#deploy@agent:goose_alice"
+    # With no stake in production, the agent can't even view it (gates list_environments).
+    - "environment:production#view@agent:goose_alice"
+    # THE CASCADE, in schema logic: a production grant WITHOUT the staging grant it is
+    # gated by confers nothing — exactly what happens to the agent once staging is revoked.
+    - "environment:production#agent_deploy@agent:goose_prodonly"
+    - "environment:production#deploy@agent:goose_prodonly"
+    # Destroy has no agent path at all (→ BLOCKED).
+    - "environment:staging#destroy@agent:goose_alice"
+    - "environment:production#destroy@agent:goose_alice"
+    # And alice herself is not a destroyer — so destroy stays BLOCKED, not escalatable.
+    - "environment:production#destroy@user:alice"

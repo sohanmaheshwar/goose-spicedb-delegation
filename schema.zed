@@ -1,0 +1,33 @@
+use expiration
+
+definition user {}
+
+definition agent {
+    relation delegator: user
+}
+
+definition environment {
+    relation direct_deployer: user
+    relation agent_deployer: agent with expiration
+    relation approver: user
+    relation destroyer: user
+
+    // Which environment's agent-autonomy this one is contingent on. A base env
+    // points to itself (staging -> staging); a dependent env points to its base
+    // (production -> staging). Revoking the base's delegation therefore suspends
+    // the dependent's automatically — the cascade lives here, not in app code.
+    relation gated_by: environment
+
+    // The agent may deploy autonomously here only if it holds an (unexpired) grant
+    // HERE and still holds the gating environment's grant.
+    permission agent_deploy = agent_deployer & gated_by->agent_deployer
+
+    permission deploy = direct_deployer + agent_deploy
+    permission approve = approver
+    permission destroy = destroyer
+    // view: humans always; the agent only where it may actually deploy (so the
+    // cascade also hides a suspended environment from its listing).
+    permission view = direct_deployer + approver + destroyer + agent_deploy
+    // manage: an environment operator may revoke agent delegations on it.
+    permission manage = direct_deployer
+}

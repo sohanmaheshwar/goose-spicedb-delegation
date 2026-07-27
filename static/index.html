@@ -253,6 +253,33 @@
   }
   .system b { color: var(--text); font-weight: 600; }
 
+  /* ---------- Walking-goose "thinking" indicator ---------- */
+  .thinking { display: flex; animation: rise 0.28s ease both; }
+  .thinking .bubble {
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-bottom-left-radius: 4px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .walk-track { position: relative; width: 92px; height: 24px; flex: none; }
+  .goose-walk {
+    position: absolute; left: 0; top: 1px;
+    font-size: 20px; line-height: 1;
+    animation: stroll 2.2s ease-in-out infinite alternate, waddle 0.45s ease-in-out infinite;
+    will-change: left, transform;
+  }
+  .thinking .label { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  @keyframes stroll { from { left: 0; } to { left: calc(100% - 22px); } }
+  @keyframes waddle {
+    0%   { transform: translateY(0)    rotate(-9deg); }
+    25%  { transform: translateY(-4px) rotate(0deg); }
+    50%  { transform: translateY(0)    rotate(9deg); }
+    75%  { transform: translateY(-4px) rotate(0deg); }
+    100% { transform: translateY(0)    rotate(-9deg); }
+  }
+
   /* ---------- Composer ---------- */
   .composer { display: flex; flex-direction: column; gap: 10px; }
   .chips { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -290,6 +317,7 @@
   @media (prefers-reduced-motion: reduce) {
     .msg, .system, .chip { animation: none; }
     .grant .bar > i { transition: none; }
+    .goose-walk { animation: none; }
   }
 </style>
 </head>
@@ -390,20 +418,43 @@ function addAgent(data) {
   transcript.appendChild(m); scroll();
 }
 
+function addThinking() {
+  clearEmpty();
+  const m = el("div", "msg thinking");
+  const b = el("div", "bubble");
+  const track = el("div", "walk-track");
+  track.appendChild(el("span", "goose-walk", "🪿"));
+  b.appendChild(track);
+  b.appendChild(el("div", "label", "goose is checking with SpiceDB…"));
+  m.appendChild(b);
+  transcript.appendChild(m); scroll();
+  return m;
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
 async function send(text) {
   const t = text.trim();
   if (!t) return;
   addUser(t);
   input.value = "";
+  const thinking = addThinking();
+  const started = performance.now();
+  let data = null, failed = false;
   try {
     const res = await fetch("/api/request", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: t }),
     });
-    addAgent(await res.json());
+    data = await res.json();
   } catch (e) {
-    addSystem("Could not reach the server — is <b>python web.py</b> running?");
+    failed = true;
   }
+  // Local checks are near-instant; hold the walk long enough to read on camera.
+  const wait = 1400 - (performance.now() - started);
+  if (wait > 0) await sleep(wait);
+  thinking.remove();
+  if (failed) addSystem("Could not reach the server — is <b>python web.py</b> running?");
+  else addAgent(data);
   refreshState();
 }
 

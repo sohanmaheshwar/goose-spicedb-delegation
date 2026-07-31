@@ -5,6 +5,10 @@ mutating action is authorized by [SpiceDB](https://github.com/authzed/spicedb). 
 human explicitly, and revocably, delegated to it — even though goose runs with your full machine
 credentials.
 
+## Watch the walkthrough
+
+[![Watch the walkthrough: delegated authorization for AI agents with goose and SpiceDB](https://img.youtube.com/vi/hJE3s1v929Y/maxresdefault.jpg)](https://www.youtube.com/watch?v=hJE3s1v929Y)
+
 ## The model
 
 - `user:alice` (SRE) can deploy staging + production and approve production deploys.
